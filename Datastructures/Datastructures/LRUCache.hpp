@@ -16,7 +16,7 @@ struct LRUCacheNode
 	LRUCacheNode* next;
 
 	// creates a new node
-	LRUCacheNode(const Key& _key, const std::shared_ptr<T> _data)
+	LRUCacheNode(const Key& _key, const std::shared_ptr<T>& _data)
 	{
 		key		= _key;
 		data	= _data;
@@ -30,9 +30,9 @@ class LRUCache
 {
 private:
 	// The head of the recently used list (most recently used)
-	LRUCacheNode<Key, T>* mHead;
+	mutable LRUCacheNode<Key, T>* mHead;
 	// The tail of the recently used list (least recently used)
-	LRUCacheNode<Key, T>* mTail;
+	mutable LRUCacheNode<Key, T>* mTail;
 	// The max capacity of the cache
 	uint32_t iMaxCapacity;
 
@@ -68,6 +68,29 @@ private:
 		// return the node to be reclaimed
 		return lru;
 	}
+
+	/**
+	 *	Takes the given node and makes it the new head node by moving it from
+	 *	its current position to the from of the list
+	 *	Any previous links in the list associated with the node will be re-wired appropriately
+	 */
+	void moveToHead(LRUCacheNode<Key, T>* _node)
+	{
+		// if the cache is empty, create the head and tail
+		if (mHead == nullptr)
+		{
+			mHead = _node;
+			mTail = _node;
+		}
+		else
+		{
+			// if the cache is non-empty, add the node to the beginning of the cache list (most recently used)
+			_node->next = mHead;
+			mHead->prev = _node;
+			mHead = _node;
+			_node->prev = nullptr;
+		}
+	}
 public:
 	/**
 	 *	Initializes the cache with a maxium storage capacity
@@ -75,7 +98,7 @@ public:
 	 *		Once size > capacity, the least recently used data will be evicted on insert of new data
 	 *		capacity must be greater than 0
 	 */
-	LRUCache(int _capacity)
+	LRUCache(const uint32_t& _capacity)
 	{
 		assert(_capacity > 0);
 
@@ -107,14 +130,14 @@ public:
 	 *
 	 *	@note runtime complexity O(1)
 	 */
-	std::shared_ptr<T> find(Key _key)
+	std::shared_ptr<T> const find(const Key& _key) const
 	{
 		// if there is no node, we didnt find the key
 		if (mNodeMap.find(_key) == mNodeMap.end())
 		{ return nullptr; }
 
 		// attempt to grab the node from the map
-		auto node = mNodeMap[_key];
+		auto node = mNodeMap.at(_key);
 
 		// if the node is the head, then this is already least recently used, just return
 		if (node == mHead)
@@ -146,7 +169,7 @@ public:
 	 *
 	 *	@note runtime complexity O(1)
 	 */
-	void insert(Key _key, const std::shared_ptr<T> _data)
+	void insert(const Key _key, const std::shared_ptr<T> _data)
 	{
 		// create a new node to insert
 		LRUCacheNode<Key, T>* newNode = nullptr;
@@ -161,22 +184,20 @@ public:
 		else
 		{ newNode = new LRUCacheNode<Key, T>(_key, _data); }
 
-		// if the cache is empty, create the head and tail
-		if (mHead == nullptr)
-		{
-			mHead = newNode;
-			mTail = newNode;
-		}
-		else 
-		{
-			// if the cache is non-empty, add the node to the beginning of the cache list (most recently used)
-			newNode->next	= mHead;
-			mHead->prev		= newNode;
-			mHead			= newNode;
-			newNode->prev	= nullptr;
-		}
+		// make the node the new head
+		moveToHead(newNode);
 
 		// add the node to the node map
 		mNodeMap[_key] = newNode;
 	}
+
+	/**
+	 *	Attempts to get the value with the given key
+	 *	@param key The key of the value to find
+	 *	@return The found value or nullptr
+	 *
+	 *	@note runtime complexity O(1)
+	 */
+	const std::shared_ptr<T> operator[] (const Key& _key) const
+	{ return find(_key); }
 };
